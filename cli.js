@@ -59,7 +59,7 @@ if (hasFlag(['--help'])) {
     --gateway-token <token>   Gateway token (auto-detected)
     --no-chat                 Disable chat/send endpoint
     --mock                    Mock mode (no OpenClaw needed)
-    --open                    Open browser after starting
+    --no-open                 Don't open browser after starting
     -v, --version             Show version
     --help                    Show this help
 
@@ -89,7 +89,7 @@ const HOST = getArg(['--host'], '127.0.0.1')
 const OPENCLAW_HOME = getArg(['--openclaw-home'], join(homedir(), '.openclaw'))
 const CHAT_DISABLED = hasFlag(['--no-chat'])
 const MOCK_MODE = hasFlag(['--mock'])
-const OPEN_BROWSER = hasFlag(['--open'])
+const OPEN_BROWSER = !hasFlag(['--no-open'])
 
 // ── Auto-detect Gateway ─────────────────────────────────────────
 
