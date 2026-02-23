@@ -13,6 +13,7 @@ import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
 import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
+import { ChatSidebar } from './components/ChatSidebar.js'
 import { ConnectionScreen } from './ConnectionScreen.js'
 import type { ConnectionStatus } from './ConnectionScreen.js'
 import { OpenClawAdapter } from './openclawAdapter.js'
@@ -218,6 +219,19 @@ function App() {
   const { agents, selectedAgent, agentTools, agentStatuses, agentMeta, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [sidebarAgentId, setSidebarAgentId] = useState<number | null>(null)
+
+  // Sync sidebar with officeState.selectedAgentId (set by canvas click)
+  useEffect(() => {
+    let rafId = 0
+    const check = () => {
+      const current = getOfficeState().selectedAgentId
+      setSidebarAgentId((prev) => prev === current ? prev : current)
+      rafId = requestAnimationFrame(check)
+    }
+    rafId = requestAnimationFrame(check)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
 
@@ -241,11 +255,15 @@ function App() {
   )
 
   const handleCloseAgent = useCallback((_id: number) => {
-    // In standalone mode, closing an agent is a no-op
+    getOfficeState().selectedAgentId = null
   }, [])
 
   const handleClick = useCallback((_agentId: number) => {
-    // In standalone mode, clicking an agent is a no-op (no terminal to focus)
+    // Selection is handled by OfficeCanvas internally (sets officeState.selectedAgentId)
+  }, [])
+
+  const handleCloseSidebar = useCallback(() => {
+    getOfficeState().selectedAgentId = null
   }, [])
 
   // Listen for OpenClaw errors to update connection status and show toasts
@@ -407,141 +425,159 @@ function App() {
     )
   }
 
+  const sidebarMeta = sidebarAgentId != null ? agentMeta[sidebarAgentId] : undefined
+  const sidebarIsActive = sidebarAgentId != null ? (officeState.characters.get(sidebarAgentId)?.isActive ?? false) : false
+
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-      <style>{`
-        @keyframes pixel-agents-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-        .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
-      `}</style>
+    <div style={{ width: '100%', height: '100%', display: 'flex' }}>
+      {/* Office panel */}
+      <div ref={containerRef} style={{ flex: sidebarAgentId != null ? '0 0 70%' : '1 1 100%', height: '100%', position: 'relative', overflow: 'hidden', transition: 'flex 0.2s ease' }}>
+        <style>{`
+          @keyframes pixel-agents-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+          }
+          .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
+        `}</style>
 
-      <OfficeCanvas
-        officeState={officeState}
-        onClick={handleClick}
-        isEditMode={editor.isEditMode}
-        editorState={editorState}
-        onEditorTileAction={editor.handleEditorTileAction}
-        onEditorEraseAction={editor.handleEditorEraseAction}
-        onEditorSelectionChange={editor.handleEditorSelectionChange}
-        onDeleteSelected={editor.handleDeleteSelected}
-        onRotateSelected={editor.handleRotateSelected}
-        onDragMove={editor.handleDragMove}
-        editorTick={editor.editorTick}
-        zoom={editor.zoom}
-        onZoomChange={editor.handleZoomChange}
-        panRef={editor.panRef}
-      />
+        <OfficeCanvas
+          officeState={officeState}
+          onClick={handleClick}
+          isEditMode={editor.isEditMode}
+          editorState={editorState}
+          onEditorTileAction={editor.handleEditorTileAction}
+          onEditorEraseAction={editor.handleEditorEraseAction}
+          onEditorSelectionChange={editor.handleEditorSelectionChange}
+          onDeleteSelected={editor.handleDeleteSelected}
+          onRotateSelected={editor.handleRotateSelected}
+          onDragMove={editor.handleDragMove}
+          editorTick={editor.editorTick}
+          zoom={editor.zoom}
+          onZoomChange={editor.handleZoomChange}
+          panRef={editor.panRef}
+        />
 
-      <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} />
+        <ZoomControls zoom={editor.zoom} onZoomChange={editor.handleZoomChange} />
 
-      {/* Vignette overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'var(--pixel-vignette)',
-          pointerEvents: 'none',
-          zIndex: 40,
-        }}
-      />
-
-      {/* Status bar */}
-      <StatusBar
-        gatewayHost={gatewayHost}
-        agentCount={agents.length}
-        onDisconnect={handleDisconnect}
-        isMock={isMockMode}
-      />
-
-      {/* Error toasts */}
-      <ErrorToasts
-        toasts={errorToasts}
-        onDismiss={(id) => setErrorToasts((prev) => prev.filter((t) => t.id !== id))}
-      />
-
-      <BottomToolbar
-        isEditMode={editor.isEditMode}
-        onToggleEditMode={editor.handleToggleEditMode}
-        isDebugMode={isDebugMode}
-        onToggleDebugMode={handleToggleDebugMode}
-      />
-
-      {editor.isEditMode && editor.isDirty && (
-        <EditActionBar editor={editor} editorState={editorState} />
-      )}
-
-      {showRotateHint && (
+        {/* Vignette overlay */}
         <div
           style={{
             position: 'absolute',
-            top: 8,
-            left: '50%',
-            transform: editor.isDirty ? 'translateX(calc(-50% + 100px))' : 'translateX(-50%)',
-            zIndex: 49,
-            background: 'var(--pixel-hint-bg)',
-            color: '#fff',
-            fontSize: '20px',
-            padding: '3px 8px',
-            borderRadius: 0,
-            border: '2px solid var(--pixel-accent)',
-            boxShadow: 'var(--pixel-shadow)',
+            inset: 0,
+            background: 'var(--pixel-vignette)',
             pointerEvents: 'none',
-            whiteSpace: 'nowrap',
+            zIndex: 40,
           }}
-        >
-          Press <b>R</b> to rotate
-        </div>
-      )}
-
-      {editor.isEditMode && (() => {
-        // Compute selected furniture color from current layout
-        const selUid = editorState.selectedFurnitureUid
-        const selColor = selUid
-          ? officeState.getLayout().furniture.find((f) => f.uid === selUid)?.color ?? null
-          : null
-        return (
-          <EditorToolbar
-            activeTool={editorState.activeTool}
-            selectedTileType={editorState.selectedTileType}
-            selectedFurnitureType={editorState.selectedFurnitureType}
-            selectedFurnitureUid={selUid}
-            selectedFurnitureColor={selColor}
-            floorColor={editorState.floorColor}
-            wallColor={editorState.wallColor}
-            onToolChange={editor.handleToolChange}
-            onTileTypeChange={editor.handleTileTypeChange}
-            onFloorColorChange={editor.handleFloorColorChange}
-            onWallColorChange={editor.handleWallColorChange}
-            onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
-            onFurnitureTypeChange={editor.handleFurnitureTypeChange}
-            loadedAssets={loadedAssets}
-          />
-        )
-      })()}
-
-      <ToolOverlay
-        officeState={officeState}
-        agents={agents}
-        agentTools={agentTools}
-        agentMeta={agentMeta}
-        subagentCharacters={subagentCharacters}
-        containerRef={containerRef}
-        zoom={editor.zoom}
-        panRef={editor.panRef}
-        onCloseAgent={handleCloseAgent}
-      />
-
-      {isDebugMode && (
-        <DebugView
-          agents={agents}
-          selectedAgent={selectedAgent}
-          agentTools={agentTools}
-          agentStatuses={agentStatuses}
-          subagentTools={subagentTools}
-          onSelectAgent={handleSelectAgent}
         />
+
+        {/* Status bar */}
+        <StatusBar
+          gatewayHost={gatewayHost}
+          agentCount={agents.length}
+          onDisconnect={handleDisconnect}
+          isMock={isMockMode}
+        />
+
+        {/* Error toasts */}
+        <ErrorToasts
+          toasts={errorToasts}
+          onDismiss={(id) => setErrorToasts((prev) => prev.filter((t) => t.id !== id))}
+        />
+
+        <BottomToolbar
+          isEditMode={editor.isEditMode}
+          onToggleEditMode={editor.handleToggleEditMode}
+          isDebugMode={isDebugMode}
+          onToggleDebugMode={handleToggleDebugMode}
+        />
+
+        {editor.isEditMode && editor.isDirty && (
+          <EditActionBar editor={editor} editorState={editorState} />
+        )}
+
+        {showRotateHint && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: '50%',
+              transform: editor.isDirty ? 'translateX(calc(-50% + 100px))' : 'translateX(-50%)',
+              zIndex: 49,
+              background: 'var(--pixel-hint-bg)',
+              color: '#fff',
+              fontSize: '20px',
+              padding: '3px 8px',
+              borderRadius: 0,
+              border: '2px solid var(--pixel-accent)',
+              boxShadow: 'var(--pixel-shadow)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Press <b>R</b> to rotate
+          </div>
+        )}
+
+        {editor.isEditMode && (() => {
+          // Compute selected furniture color from current layout
+          const selUid = editorState.selectedFurnitureUid
+          const selColor = selUid
+            ? officeState.getLayout().furniture.find((f) => f.uid === selUid)?.color ?? null
+            : null
+          return (
+            <EditorToolbar
+              activeTool={editorState.activeTool}
+              selectedTileType={editorState.selectedTileType}
+              selectedFurnitureType={editorState.selectedFurnitureType}
+              selectedFurnitureUid={selUid}
+              selectedFurnitureColor={selColor}
+              floorColor={editorState.floorColor}
+              wallColor={editorState.wallColor}
+              onToolChange={editor.handleToolChange}
+              onTileTypeChange={editor.handleTileTypeChange}
+              onFloorColorChange={editor.handleFloorColorChange}
+              onWallColorChange={editor.handleWallColorChange}
+              onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
+              onFurnitureTypeChange={editor.handleFurnitureTypeChange}
+              loadedAssets={loadedAssets}
+            />
+          )
+        })()}
+
+        <ToolOverlay
+          officeState={officeState}
+          agents={agents}
+          agentTools={agentTools}
+          agentMeta={agentMeta}
+          subagentCharacters={subagentCharacters}
+          containerRef={containerRef}
+          zoom={editor.zoom}
+          panRef={editor.panRef}
+          onCloseAgent={handleCloseAgent}
+        />
+
+        {isDebugMode && (
+          <DebugView
+            agents={agents}
+            selectedAgent={selectedAgent}
+            agentTools={agentTools}
+            agentStatuses={agentStatuses}
+            subagentTools={subagentTools}
+            onSelectAgent={handleSelectAgent}
+          />
+        )}
+      </div>
+
+      {/* Chat sidebar — 30% width when an agent is selected */}
+      {sidebarAgentId != null && (
+        <div style={{ flex: '0 0 30%', height: '100%' }}>
+          <ChatSidebar
+            agentId={sidebarAgentId}
+            meta={sidebarMeta}
+            isActive={sidebarIsActive}
+            onClose={handleCloseSidebar}
+          />
+        </div>
       )}
     </div>
   )

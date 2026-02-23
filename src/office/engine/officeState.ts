@@ -713,6 +713,20 @@ export class OfficeState {
         continue // skip normal FSM while effect is active
       }
 
+      // Freeze selected agent — stop movement, face camera
+      if (this.selectedAgentId === ch.id) {
+        if (ch.state === CharacterState.WALK) {
+          ch.path = []
+          ch.moveProgress = 0
+          ch.state = CharacterState.IDLE
+          ch.frame = 0
+          ch.frameTimer = 0
+        }
+        ch.dir = Direction.DOWN
+        // Still tick idle frame but don't wander
+        continue
+      }
+
       // Temporarily unblock own seat so character can pathfind to it
       this.withOwnSeatUnblocked(ch, () =>
         updateCharacter(ch, dt, this.walkableTiles, this.poiTiles, this.seats, this.tileMap, this.blockedTiles)
