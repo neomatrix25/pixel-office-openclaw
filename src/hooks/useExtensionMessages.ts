@@ -40,6 +40,9 @@ export interface AgentMeta {
   name?: string
   model?: string
   kind?: string
+  lastActivity?: number
+  lastMessage?: string | null
+  agentId?: string
 }
 
 export interface ExtensionMessageState {
@@ -186,6 +189,22 @@ export function useExtensionMessages(
             }
           }
           return merged.sort((a, b) => a - b)
+        })
+      } else if (msg.type === 'agentMetaUpdate') {
+        const meta = msg.meta as Record<number, AgentMeta>
+        setAgentMeta((prev) => {
+          // Merge new metadata into existing — only update if something changed
+          let changed = false
+          const next = { ...prev }
+          for (const [idStr, m] of Object.entries(meta)) {
+            const id = Number(idStr)
+            const existing = prev[id]
+            if (!existing || existing.lastActivity !== m.lastActivity || existing.lastMessage !== m.lastMessage || existing.name !== m.name) {
+              next[id] = { ...existing, ...m }
+              changed = true
+            }
+          }
+          return changed ? next : prev
         })
       } else if (msg.type === 'agentToolStart') {
         const id = msg.id as number
@@ -378,7 +397,7 @@ export function useExtensionMessages(
 
     // Subscribe to all event types via the event bus
     const eventTypes = [
-      'layoutLoaded', 'agentCreated', 'agentClosed', 'existingAgents',
+      'layoutLoaded', 'agentCreated', 'agentClosed', 'existingAgents', 'agentMetaUpdate',
       'agentToolStart', 'agentToolDone', 'agentToolsClear',
       'agentSelected', 'agentStatus',
       'agentToolPermission', 'agentToolPermissionClear',

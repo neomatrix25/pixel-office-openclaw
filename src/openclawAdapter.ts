@@ -49,7 +49,7 @@ export interface OpenClawSession {
   createdAt?: string
 
   /** Last message content from the session. */
-  lastMessage?: unknown
+  lastMessage?: string | null
 
   /** Last messages in the session (structure TBD). */
   last_messages?: unknown[]
@@ -285,6 +285,9 @@ export class OpenClawAdapter {
       }
     }
 
+    // Emit metadata updates on every poll so UI has fresh lastActivity / lastMessage
+    this.emitMetaUpdate()
+
     // First successful poll: emit layout + existingAgents
     if (!this.initialized) {
       this.initialized = true
@@ -340,6 +343,31 @@ export class OpenClawAdapter {
       console.warn('[OpenClaw] Could not load default-layout.json:', err)
       eventBus.emit('layoutLoaded', { layout: null })
     }
+  }
+
+  /** Emit agentMetaUpdate with latest metadata for all tracked sessions. */
+  private emitMetaUpdate(): void {
+    const meta: Record<number, {
+      name?: string
+      model?: string
+      kind?: string
+      lastActivity?: number
+      lastMessage?: string | null
+      agentId?: string
+    }> = {}
+    for (const tracked of this.sessions.values()) {
+      const raw = this.sessionData.get(tracked.sessionKey)
+      if (!raw) continue
+      meta[tracked.numericId] = {
+        name: raw.name || undefined,
+        model: raw.model || undefined,
+        kind: raw.kind || undefined,
+        lastActivity: tracked.lastActivityMs,
+        lastMessage: typeof raw.lastMessage === 'string' ? raw.lastMessage : null,
+        agentId: typeof raw.agentId === 'string' ? raw.agentId : (raw.agent_id ? String(raw.agent_id) : undefined),
+      }
+    }
+    eventBus.emit('agentMetaUpdate', { meta })
   }
 
   // ── Helpers ───────────────────────────────────────────────────

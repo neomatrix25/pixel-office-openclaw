@@ -82,6 +82,7 @@ function readAgentSessions(agentId) {
         lastActivity: updatedAt,
         status: deriveStatus(s, now),
         agentId,
+        lastMessage: extractLastMessage(s) || null,
       })
     }
 
@@ -114,6 +115,28 @@ function deriveStatus(session, now) {
   }
 
   return 'idle'
+}
+
+/**
+ * Extract the last meaningful message from session data.
+ * Returns a short summary string, or null if nothing found.
+ */
+function extractLastMessage(session) {
+  const messages = session.messages || session.last_messages || []
+  if (!Array.isArray(messages) || messages.length === 0) return null
+
+  // Walk backwards to find last assistant message with text
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'assistant') {
+      if (typeof msg.content === 'string') return msg.content.slice(0, 200)
+      if (Array.isArray(msg.content)) {
+        const text = msg.content.find((c) => c.type === 'text')
+        if (text && text.text) return text.text.slice(0, 200)
+      }
+    }
+  }
+  return null
 }
 
 app.get('/sessions_list', (_req, res) => {

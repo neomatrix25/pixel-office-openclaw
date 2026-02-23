@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ToolActivity } from '../types.js'
 import type { OfficeState } from '../engine/officeState.js'
-import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js'
+import type { SubagentCharacter, AgentMeta } from '../../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../types.js'
 import { TOOL_OVERLAY_VERTICAL_OFFSET, CHARACTER_SITTING_OFFSET_PX } from '../../constants.js'
 
@@ -9,11 +9,87 @@ interface ToolOverlayProps {
   officeState: OfficeState
   agents: number[]
   agentTools: Record<number, ToolActivity[]>
+  agentMeta: Record<number, AgentMeta>
   subagentCharacters: SubagentCharacter[]
   containerRef: React.RefObject<HTMLDivElement | null>
   zoom: number
   panRef: React.RefObject<{ x: number; y: number }>
   onCloseAgent: (id: number) => void
+}
+
+// ── Agent emoji mapping ──────────────────────────────────────────
+
+const AGENT_EMOJIS: Record<string, string> = {
+  main: '\u{1F99E}',       // lobster
+  researcher: '\u{1F50D}', // magnifying glass
+  'coder-1': '\u{1F4BB}',  // laptop
+  'coder-2': '\u{1F4BB}',  // laptop
+  writer: '\u270D\uFE0F',  // writing hand
+  planner: '\u{1F4CB}',    // clipboard
+  ops: '\u2699\uFE0F',     // gear
+  edu: '\u{1F4DA}',        // books
+}
+
+const KIND_EMOJIS: Record<string, string> = {
+  coder: '\u{1F4BB}',
+  developer: '\u{1F4BB}',
+  engineer: '\u{1F4BB}',
+  researcher: '\u{1F50D}',
+  analyst: '\u{1F50D}',
+  planner: '\u{1F4CB}',
+  writer: '\u270D\uFE0F',
+  designer: '\u{1F3A8}',
+  reviewer: '\u{1F440}',
+  tester: '\u{1F9EA}',
+  ops: '\u2699\uFE0F',
+  agent: '\u{1F916}',
+}
+
+function getAgentEmoji(meta: AgentMeta | undefined): string {
+  if (!meta) return '\u{1F916}' // robot
+  // Try agentId-based emoji first (most specific)
+  if (meta.agentId && AGENT_EMOJIS[meta.agentId]) return AGENT_EMOJIS[meta.agentId]
+  // Try kind-based emoji
+  if (meta.kind && KIND_EMOJIS[meta.kind.toLowerCase()]) return KIND_EMOJIS[meta.kind.toLowerCase()]
+  // Try name-based match
+  if (meta.name) {
+    const lower = meta.name.toLowerCase()
+    for (const [key, emoji] of Object.entries(AGENT_EMOJIS)) {
+      if (lower.includes(key)) return emoji
+    }
+  }
+  return '\u{1F916}' // robot fallback
+}
+
+function getAgentDisplayName(meta: AgentMeta | undefined, id: number): string {
+  if (meta?.name) {
+    // Capitalize first letter
+    return meta.name.charAt(0).toUpperCase() + meta.name.slice(1)
+  }
+  return `Agent ${id}`
+}
+
+// ── Relative time formatting ─────────────────────────────────────
+
+function relativeTime(ms: number | undefined): string {
+  if (!ms) return ''
+  const ago = Date.now() - ms
+  if (ago < 0) return 'just now'
+  if (ago < 10_000) return 'just now'
+  if (ago < 60_000) return `${Math.floor(ago / 1000)}s ago`
+  if (ago < 3_600_000) return `${Math.floor(ago / 60_000)}m ago`
+  if (ago < 86_400_000) return `${Math.floor(ago / 3_600_000)}h ago`
+  return `${Math.floor(ago / 86_400_000)}d ago`
+}
+
+// ── Fun idle status labels ───────────────────────────────────────
+
+function getIdleLabel(lastActivityMs: number | undefined): string {
+  if (!lastActivityMs) return 'Idle'
+  const ago = Date.now() - lastActivityMs
+  if (ago < 60_000) return '\u2615 Break'       // coffee
+  if (ago < 300_000) return '\u{1F4A4} Resting'  // zzz
+  return '\u{1F319} AFK'                          // crescent moon
 }
 
 /** Derive a short human-readable activity string from tools/status */
@@ -37,13 +113,94 @@ function getActivityText(
     }
   }
 
-  return 'Idle'
+  return isActive ? 'Working...' : ''
 }
+
+// ── Detail Card (click popup) ────────────────────────────────────
+
+function AgentDetailCard({
+  meta,
+  emoji,
+  displayName,
+  isActive,
+  lastActivityMs,
+  lastMessage,
+}: {
+  meta: AgentMeta | undefined
+  emoji: string
+  displayName: string
+  isActive: boolean
+  lastActivityMs: number | undefined
+  lastMessage: string | null | undefined
+}) {
+  const model = meta?.model || 'unknown'
+  const idleLabel = getIdleLabel(lastActivityMs)
+  const timeAgo = relativeTime(lastActivityMs)
+
+  return (
+    <div
+      style={{
+        background: 'var(--pixel-bg)',
+        border: '2px solid var(--pixel-border-light)',
+        borderRadius: 0,
+        padding: '6px 10px',
+        boxShadow: 'var(--pixel-shadow)',
+        minWidth: 180,
+        maxWidth: 260,
+        marginTop: 4,
+      }}
+    >
+      {/* Header: name + emoji */}
+      <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--vscode-foreground)', marginBottom: 4 }}>
+        {emoji} {displayName}
+      </div>
+
+      {/* Model */}
+      <div style={{ fontSize: '18px', color: 'var(--pixel-text-dim)', marginBottom: 3 }}>
+        {model}
+      </div>
+
+      {/* Status */}
+      <div style={{ fontSize: '20px', color: isActive ? 'var(--pixel-status-active-text, #5ac88c)' : 'var(--pixel-text-dim)', marginBottom: 3 }}>
+        {isActive ? '\u{1F7E2} Working' : idleLabel}
+      </div>
+
+      {/* Last active */}
+      {timeAgo && (
+        <div style={{ fontSize: '18px', color: 'var(--pixel-text-dim)', marginBottom: 3 }}>
+          Last active: {timeAgo}
+        </div>
+      )}
+
+      {/* Last message */}
+      {lastMessage && (
+        <div style={{
+          fontSize: '18px',
+          color: 'var(--pixel-text-dim)',
+          marginTop: 4,
+          paddingTop: 4,
+          borderTop: '1px solid var(--pixel-border)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          lineHeight: 1.3,
+        }}>
+          {lastMessage}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Overlay ─────────────────────────────────────────────────
 
 export function ToolOverlay({
   officeState,
   agents,
   agentTools,
+  agentMeta,
   subagentCharacters,
   containerRef,
   zoom,
@@ -97,18 +254,31 @@ export function ToolOverlay({
         const screenX = (deviceOffsetX + ch.x * zoom) / dpr
         const screenY = (deviceOffsetY + (ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET) * zoom) / dpr
 
+        const meta = agentMeta[id]
+        const emoji = getAgentEmoji(meta)
+        const displayName = getAgentDisplayName(meta, id)
+
         // Get activity text
         const subHasPermission = isSub && ch.bubbleType === 'permission'
-        let activityText: string
+        let hoverText: string
         if (isSub) {
           if (subHasPermission) {
-            activityText = 'Needs approval'
+            hoverText = 'Needs approval'
           } else {
             const sub = subagentCharacters.find((s) => s.id === id)
-            activityText = sub ? sub.label : 'Subtask'
+            hoverText = sub ? sub.label : 'Subtask'
           }
         } else {
-          activityText = getActivityText(id, agentTools, ch.isActive)
+          const toolText = getActivityText(id, agentTools, ch.isActive)
+          if (toolText) {
+            // Has specific tool activity or "Working..."
+            hoverText = `${displayName} ${emoji} \u2014 ${toolText}`
+          } else {
+            // Idle — show fun label + relative time
+            const idleLabel = getIdleLabel(meta?.lastActivity)
+            const timeAgo = relativeTime(meta?.lastActivity)
+            hoverText = `${displayName} ${emoji} \u2014 ${idleLabel}${timeAgo ? ` (${timeAgo})` : ''}`
+          }
         }
 
         // Determine dot color
@@ -121,6 +291,8 @@ export function ToolOverlay({
         if (hasPermission) {
           dotColor = 'var(--pixel-status-permission)'
         } else if (isActive && hasActiveTools) {
+          dotColor = 'var(--pixel-status-active)'
+        } else if (isActive) {
           dotColor = 'var(--pixel-status-active)'
         }
 
@@ -139,6 +311,7 @@ export function ToolOverlay({
               zIndex: isSelected ? 'var(--pixel-overlay-selected-z)' : 'var(--pixel-overlay-z)',
             }}
           >
+            {/* Hover/selected label */}
             <div
               style={{
                 display: 'flex',
@@ -152,7 +325,7 @@ export function ToolOverlay({
                 padding: isSelected ? '3px 6px 3px 8px' : '3px 8px',
                 boxShadow: 'var(--pixel-shadow)',
                 whiteSpace: 'nowrap',
-                maxWidth: 220,
+                maxWidth: 300,
               }}
             >
               {dotColor && (
@@ -176,7 +349,7 @@ export function ToolOverlay({
                   textOverflow: 'ellipsis',
                 }}
               >
-                {activityText}
+                {hoverText}
               </span>
               {isSelected && !isSub && (
                 <button
@@ -203,10 +376,22 @@ export function ToolOverlay({
                     (e.currentTarget as HTMLElement).style.color = 'var(--pixel-close-text)'
                   }}
                 >
-                  ×
+                  x
                 </button>
               )}
             </div>
+
+            {/* Click popup: detail card (only for selected non-subagents) */}
+            {isSelected && !isSub && (
+              <AgentDetailCard
+                meta={meta}
+                emoji={emoji}
+                displayName={displayName}
+                isActive={isActive}
+                lastActivityMs={meta?.lastActivity}
+                lastMessage={meta?.lastMessage}
+              />
+            )}
           </div>
         )
       })}
