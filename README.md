@@ -1,8 +1,10 @@
-# 🏢 Pixel Office
+# 🏢 Pixel Office — by Tridents Lab 🔱
 
 Watch your [OpenClaw](https://openclaw.ai) AI agents work in a pixel-art virtual office.
 
 Each agent gets an animated character that walks around, sits at desks, and shows real-time status as they execute tasks. Click any agent to chat with them directly.
+
+<!-- ![Pixel Office Demo](demo.gif) -->
 
 ## Quick Start
 
@@ -141,3 +143,4 @@ MIT — see [LICENSE](LICENSE)
 Built by [Tridents Lab](https://github.com/neomatrix25) 🔱
 
 Character sprites based on [pixel-agents](https://github.com/pablodelucca/pixel-agents) (MIT).
+Office furniture sprites by [2dPig](https://2dpig.itch.io) (CC0 Public Domain).
