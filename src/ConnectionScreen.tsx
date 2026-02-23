@@ -41,11 +41,13 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 0,
   padding: '20px 28px',
   boxShadow: 'var(--pixel-shadow)',
-  minWidth: 320,
+  minWidth: 280,
   maxWidth: 420,
+  width: '90%',
   display: 'flex',
   flexDirection: 'column',
   gap: 14,
+  boxSizing: 'border-box',
 }
 
 const titleStyle: React.CSSProperties = {

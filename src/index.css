@@ -186,3 +186,76 @@ html, body, #root {
     transform: translateX(0);
   }
 }
+
+/* ── Responsive: Mobile & Small Screens ─────────────────── */
+
+@media (max-width: 640px) {
+  /* Status bar: compact on mobile */
+  .pixel-status-bar {
+    font-size: 14px;
+    padding: 3px 6px;
+  }
+
+  .pixel-status-bar-left {
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .pixel-status-text {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pixel-status-disconnect {
+    font-size: 14px;
+    padding: 4px 8px;
+    min-height: 32px;
+  }
+
+  /* Toasts: full-width on mobile */
+  .pixel-toast-container {
+    left: 10px;
+    right: 10px;
+    max-width: none;
+  }
+
+  .pixel-toast {
+    font-size: 14px;
+  }
+
+  .pixel-toast-close {
+    min-width: 28px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Touch-friendly: ensure tap targets are at least 44px */
+@media (pointer: coarse) {
+  .pixel-status-disconnect {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 12px;
+  }
+
+  .pixel-toast-close {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Prevent text selection on canvas overlays during touch */
+@media (pointer: coarse) {
+  #root {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+}
