@@ -15,8 +15,8 @@
  */
 
 import express from 'express'
-import { readFileSync, readdirSync, existsSync } from 'fs'
-import { execSync } from 'child_process'
+import { readFileSync, readdirSync, existsSync, statSync } from 'fs'
+import { execFileSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { homedir } from 'os'
@@ -63,6 +63,12 @@ function readAgentSessions(agentId) {
   if (!existsSync(sessionsFile)) return []
 
   try {
+    // Guard against oversized files (max 10MB)
+    const fstat = statSync(sessionsFile)
+    if (fstat.size > 10 * 1024 * 1024) {
+      console.warn(`[bridge] Skipping ${agentId} — sessions.json too large (${fstat.size} bytes)`)
+      return []
+    }
     const raw = readFileSync(sessionsFile, 'utf-8')
     const data = JSON.parse(raw)
 
@@ -143,8 +149,18 @@ function extractLastMessage(session) {
   return null
 }
 
+// Simple in-memory cache for session list (avoid I/O spam from rapid polling)
+let sessionCache = { data: null, ts: 0 }
+const CACHE_TTL_MS = 3000
+
 app.get('/sessions_list', (_req, res) => {
   try {
+    // Return cached result if fresh
+    const now = Date.now()
+    if (sessionCache.data && (now - sessionCache.ts) < CACHE_TTL_MS) {
+      return res.json(sessionCache.data)
+    }
+
     const agents = AGENT_IDS || discoverAgents()
     const allSessions = []
 
@@ -164,14 +180,12 @@ app.get('/sessions_list', (_req, res) => {
     }
     const dedupedSessions = [...byAgent.values()]
 
-    res.json({ sessions: dedupedSessions })
+    const result = { sessions: dedupedSessions }
+    sessionCache = { data: result, ts: Date.now() }
+    res.json(result)
   } catch (err) {
-    const message = err.message || 'Session store read failed'
-    console.error('[bridge] Error:', message)
-    res.status(500).json({
-      error: 'Session store read failed',
-      detail: String(message).slice(0, 200),
-    })
+    console.error('[bridge] Error:', err.message || err)
+    res.status(500).json({ error: 'Session store read failed' })
   }
 })
 
@@ -250,10 +264,9 @@ app.post('/api/send', async (req, res) => {
     if (!resp.ok) {
       const body = await resp.text()
       console.error(`[bridge] Gateway send failed for ${safeAgentId}: ${resp.status} ${body.slice(0, 200)}`)
-      // Fallback to CLI
+      // Fallback to CLI (execFileSync to prevent shell injection)
       try {
-        execSync(
-          `openclaw agent --agent ${safeAgentId} --message ${JSON.stringify(safeMessage)} --deliver`,
+        execFileSync('openclaw', ['agent', '--agent', safeAgentId, '--message', safeMessage, '--deliver'],
           { timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
         )
         console.log(`[bridge] Sent to ${safeAgentId} (CLI fallback): ${safeMessage.slice(0, 50)}...`)

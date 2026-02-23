@@ -137,7 +137,7 @@ if (MOCK_MODE) {
 } else {
   console.log(`  OpenClaw: ${OPENCLAW_HOME}`)
   console.log(`  Gateway:  ${GATEWAY_URL || '(not detected)'}`)
-  console.log(`  Token:    ${GATEWAY_TOKEN ? '****' + GATEWAY_TOKEN.slice(-4) : '(not detected)'}`)
+  console.log(`  Token:    ${GATEWAY_TOKEN ? '(configured)' : '(not detected)'}`)
 }
 console.log(`  Server:   http://${HOST}:${PORT}`)
 console.log(`  Chat:     ${CHAT_DISABLED ? 'disabled' : 'enabled'}`)
