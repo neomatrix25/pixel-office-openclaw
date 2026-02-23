@@ -1,19 +1,44 @@
 {
   "name": "pixel-office",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Watch your OpenClaw AI agents work in a pixel-art virtual office",
   "type": "module",
+  "bin": {
+    "pixel-office": "cli.js"
+  },
+  "main": "server.js",
+  "files": [
+    "cli.js",
+    "server.js",
+    "dist/**",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "start": "node server.js",
+    "start": "node cli.js",
+    "serve": "node server.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "openclaw",
+    "ai-agents",
+    "pixel-art",
+    "office",
+    "visualization",
+    "dashboard"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neomatrix25/pixel-office"
+  },
+  "author": "Tridents Lab",
+  "license": "MIT",
   "dependencies": {
-    "express": "^5.1.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -25,8 +50,13 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

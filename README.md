@@ -1,106 +1,143 @@
-# Pixel Office
+# 🏢 Pixel Office
 
-A standalone React + Canvas 2D pixel-art office visualizer for OpenClaw agent sessions. Watch your AI agents work in a virtual office -- each agent gets a desk, walks around, and shows real-time status as they execute tasks.
+Watch your [OpenClaw](https://openclaw.ai) AI agents work in a pixel-art virtual office.
 
-![Screenshot placeholder](docs/screenshot.png)
-
-## Features
-
-- Real-time pixel-art office with animated agent characters
-- Connects to OpenClaw gateway to visualize live agent sessions
-- Agent identity: displays session name, model, and role
-- Status indicators: green glow (active), yellow (waiting), grey (idle)
-- Role-based sprite palettes (coders, researchers, planners get distinct looks)
-- Interactive layout editor with undo/redo, furniture placement, and color controls
-- Speech bubbles for permission requests and waiting states
-- Matrix-style spawn/despawn animations
-- Mock mode for demo and development
+Each agent gets an animated character that walks around, sits at desks, and shows real-time status as they execute tasks. Click any agent to chat with them directly.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
+npx pixel-office
+```
+
+That's it. Pixel Office auto-detects your local OpenClaw instance and starts a web server at `http://localhost:3002`.
+
+> **No OpenClaw?** Try `npx pixel-office --mock` to see it with simulated agents.
+
+## Features
+
+- 🎮 **Pixel-art office** with animated characters and furniture
+- 🔄 **Real-time status** — agents glow green when working, go idle when done
+- 💬 **Chat** — click any agent to send them a message
+- 🏗️ **Layout editor** — customize the office with desks, plants, bookshelves
+- 🎨 **Role-based sprites** — coders, researchers, planners get distinct looks
+- ✨ **Matrix animations** — spawn/despawn effects when agents come and go
+- 📊 **Activity log** — see what your agents are doing in real-time
+- 🖱️ **Interactive** — click agents to freeze them, hover for status tooltips
+
+## Installation
+
+### Global install (recommended)
+
+```bash
+npm install -g pixel-office
+pixel-office
+```
+
+### npx (no install)
+
+```bash
+npx pixel-office
+```
+
+### From source
+
+```bash
+git clone https://github.com/neomatrix25/pixel-office.git
+cd pixel-office
 npm install
-
-# Start dev server
-npm run dev
+npm run build
+npm start
 ```
 
-Open `http://localhost:5173` in your browser.
+## Configuration
 
-## Connecting to OpenClaw
-
-1. Enter your OpenClaw gateway URL and API token on the connection screen
-2. The adapter polls `/sessions_list` and maps sessions to office agents
-3. Credentials are saved to localStorage for auto-reconnect
-
-## Mock Mode
-
-Add `?mock=true` to the URL to run with simulated agents:
+Pixel Office auto-detects your OpenClaw setup. Override with CLI flags:
 
 ```
-http://localhost:5173/?mock=true
+pixel-office [options]
+
+Options:
+  -p, --port <number>       Port (default: 3002)
+  --host <address>          Bind address (default: 127.0.0.1)
+  --openclaw-home <path>    OpenClaw home dir (default: ~/.openclaw)
+  --gateway-url <url>       Gateway URL (auto-detected)
+  --gateway-token <token>   Gateway token (auto-detected)
+  --no-chat                 Disable chat endpoint
+  --mock                    Demo mode with simulated agents
+  --open                    Open browser automatically
 ```
 
-This creates 3 mock agents that cycle through tool activities -- useful for development and demos without a running OpenClaw instance.
+### Examples
 
-## Architecture
+```bash
+# Default — auto-detect everything
+pixel-office
 
-```
-src/
-  App.tsx                    # Root component, connection management
-  ConnectionScreen.tsx       # Gateway URL + token input
-  openclawAdapter.ts         # OpenClaw API poller, event bridge
-  mockProvider.ts            # Mock data for demo mode
-  eventBus.ts                # Internal pub/sub (replaces VS Code postMessage)
-  hooks/
-    useExtensionMessages.ts  # React hook consuming event bus
-  office/
-    engine/
-      officeState.ts         # Game state: characters, seats, pathfinding
-      characters.ts          # Character FSM (idle, walk, type)
-      renderer.ts            # Canvas 2D rendering (tiles, furniture, characters)
-      gameLoop.ts            # requestAnimationFrame loop
-    layout/
-      furnitureCatalog.ts    # Furniture type definitions
-      layoutSerializer.ts    # Layout JSON to/from game state
-      tileMap.ts             # Tile walkability + A* pathfinding
-    sprites/
-      spriteData.ts          # Pixel art sprite definitions
-      spriteCache.ts         # Cached scaled sprites
-    components/
-      OfficeCanvas.tsx        # Canvas element + input handling
-      ToolOverlay.tsx         # HTML overlay for tool activity display
-    editor/                  # Layout editor tools
-  components/
-    AgentLabels.tsx          # Agent name labels above characters
-    ZoomControls.tsx         # Zoom +/- buttons
-    BottomToolbar.tsx        # Edit mode + settings toggle
-    DebugView.tsx            # Debug panel for agent state inspection
-public/
-  assets/
-    default-layout.json     # Default office layout
+# Custom port
+pixel-office --port 8080
+
+# Expose to your network (default is localhost only)
+pixel-office --host 0.0.0.0
+
+# Demo mode — no OpenClaw needed
+pixel-office --mock
+
+# Remote OpenClaw instance
+pixel-office --gateway-url http://myserver:18789 --gateway-token mytoken
 ```
 
-## Tech Stack
+### Remote Access
 
-- **React 19** with TypeScript
-- **Vite** for build tooling
-- **Canvas 2D** for pixel-art rendering (no WebGL)
-- **Custom event bus** for decoupled component communication
-- **A* pathfinding** for character navigation
-- **FS Pixel Sans** bitmap font
+By default, Pixel Office only listens on `127.0.0.1` (localhost). To access from other machines:
+
+```bash
+pixel-office --host 0.0.0.0
+```
+
+⚠️ **Security**: When exposed to a network, the server can read your agent sessions and send messages. Only expose on trusted networks.
+
+## How It Works
+
+Pixel Office runs a lightweight Express server that:
+
+1. **Reads agent session stores** from `~/.openclaw/agents/*/sessions/sessions.json`
+2. **Deduplicates sessions** — one character per agent, using the most recently active session
+3. **Serves a React app** that renders a pixel-art office on HTML Canvas
+4. **Polls every 3 seconds** for status updates
+5. **Proxies chat messages** to agents via the OpenClaw gateway API
+
+No data leaves your machine. The gateway token stays server-side and is never sent to the browser.
 
 ## Layout Editor
 
-Press the **Layout** button (bottom-left) to enter edit mode:
+Click the **Edit** button (bottom toolbar) to customize your office:
 
-- Paint floor tiles and walls
-- Place furniture (desks, chairs, bookshelves, plants, etc.)
-- Select, move, rotate, and delete items
-- Undo/redo with Ctrl+Z / Ctrl+Y
-- Save layouts (persisted via event bus)
+- 🎨 Paint floor tiles and walls
+- 🪑 Place furniture (desks, chairs, plants, bookshelves)
+- ↩️ Undo/redo (Ctrl+Z / Ctrl+Y)
+- 🔄 Rotate items (R key)
+- 💾 Save your layout
+
+## Requirements
+
+- **Node.js 18+**
+- **OpenClaw** running locally (or use `--mock` for demo)
+
+## Tech Stack
+
+- React 19 + TypeScript
+- Canvas 2D rendering (no WebGL)
+- Vite for builds
+- Express 5 for the bridge server
+- A* pathfinding for character navigation
 
 ## License
 
-Proprietary. All rights reserved.
+MIT — see [LICENSE](LICENSE)
+
+## Credits
+
+Built by [Tridents Lab](https://github.com/neomatrix25) 🔱
+
+Character sprites based on [pixel-agents](https://github.com/pablodelucca/pixel-agents) (MIT).

@@ -25,8 +25,10 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const PORT = parseInt(process.env.PORT || '3002', 10)
+const HOST = process.env.PIXEL_OFFICE_HOST || '127.0.0.1'
 const OPENCLAW_HOME = process.env.OPENCLAW_HOME || join(homedir(), '.openclaw')
 const ACTIVE_MINUTES = parseInt(process.env.OPENCLAW_ACTIVE_MIN || '60', 10)
+const CHAT_DISABLED = process.env.PIXEL_OFFICE_NO_CHAT === '1'
 const AGENT_IDS = process.env.OPENCLAW_AGENTS
   ? process.env.OPENCLAW_AGENTS.split(',').map((s) => s.trim())
   : null // null = auto-detect from directory listing
@@ -211,6 +213,9 @@ function getActiveSessionKey(agentId) {
 }
 
 app.post('/api/send', async (req, res) => {
+  if (CHAT_DISABLED) {
+    return res.status(403).json({ error: 'Chat is disabled. Start with --no-chat removed to enable.' })
+  }
   const { agentId, message } = req.body || {}
   if (!agentId || !message) {
     return res.status(400).json({ error: 'Missing agentId or message' })
@@ -280,9 +285,9 @@ app.get('/{*path}', (_req, res) => {
 
 // ── Start ───────────────────────────────────────────────────────
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, HOST, () => {
   const agents = AGENT_IDS || discoverAgents()
-  console.log(`[server] Pixel Office running at http://0.0.0.0:${PORT}`)
+  console.log(`[server] Pixel Office running at http://${HOST}:${PORT}`)
   console.log(`[server] Session store: ${OPENCLAW_HOME}/agents/`)
   console.log(`[server] Scanning ${agents.length} agents: ${agents.join(', ')}`)
   console.log(`[server] Activity window: ${ACTIVE_MINUTES} minutes`)
