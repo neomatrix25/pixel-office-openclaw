@@ -89,7 +89,7 @@ interface TrackedSession {
 // ── Activity Threshold ──────────────────────────────────────────
 
 /** Sessions with activity within this window are considered "active". */
-const ACTIVE_THRESHOLD_MS = 10_000
+const ACTIVE_THRESHOLD_MS = 60_000
 
 /** Default polling interval in milliseconds. */
 const DEFAULT_POLL_INTERVAL_MS = 3_000
@@ -379,14 +379,16 @@ export class OpenClawAdapter {
 
   /**
    * Extract a stable unique key for a session.
-   * Prefers session_key, falls back to agent_id, then generates one.
+   * Uses agentId as the primary key (bridge already dedupes sessions per agent).
+   * Falls back to sessionKey only if agentId is missing.
    */
   private getSessionKey(session: OpenClawSession): string {
-    // Prefer camelCase (OpenClaw native), fall back to snake_case
-    if (session.sessionKey) return String(session.sessionKey)
-    if (session.session_key) return String(session.session_key)
+    // Use agentId as the stable key — the bridge returns one entry per agent
     if (session.agentId !== undefined) return `agent-${session.agentId}`
     if (session.agent_id !== undefined) return `agent-${session.agent_id}`
+    // Fallback to session key
+    if (session.sessionKey) return String(session.sessionKey)
+    if (session.session_key) return String(session.session_key)
     // Last resort: hash some fields together
     return `unknown-${JSON.stringify(session).slice(0, 64)}`
   }

@@ -99,8 +99,8 @@ function readAgentSessions(agentId) {
  * Derive agent status from session data.
  */
 function deriveStatus(session, now) {
-  // If updated within last 10 seconds, consider active
-  if (session.updatedAt && (now - session.updatedAt) < 10000) {
+  // If updated within last 60 seconds, consider active
+  if (session.updatedAt && (now - session.updatedAt) < 60000) {
     return 'active'
   }
 
@@ -210,7 +210,7 @@ function getActiveSessionKey(agentId) {
   }
 }
 
-app.post('/api/send', (req, res) => {
+app.post('/api/send', async (req, res) => {
   const { agentId, message } = req.body || {}
   if (!agentId || !message) {
     return res.status(400).json({ error: 'Missing agentId or message' })
@@ -219,39 +219,52 @@ app.post('/api/send', (req, res) => {
   const safeAgentId = String(agentId).replace(/[^a-zA-Z0-9_-]/g, '')
   const safeMessage = String(message).slice(0, 2000)
 
-  // Route to agent's existing session (same conversation as Slack)
+  // Use OpenClaw gateway API to send message to the agent's session
+  const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789'
+  const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || ''
+
+  // Find the agent's most recent session key
   const sessionKey = getActiveSessionKey(safeAgentId)
-  const safeSessionKey = sessionKey ? String(sessionKey).replace(/[^a-zA-Z0-9_.:/-]/g, '') : null
-  const sessionFlag = safeSessionKey ? ` --session-id ${JSON.stringify(safeSessionKey)}` : ''
 
   try {
-    const result = execSync(
-      `openclaw agent --agent ${safeAgentId}${sessionFlag} --message ${JSON.stringify(safeMessage)} --json`,
-      { timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    )
-    let reply = null
-    try {
-      const parsed = JSON.parse(result)
-      reply = parsed.reply || parsed.response || parsed.text || null
-    } catch {
-      reply = result.trim() || null
+    // Use sessions_send via the gateway API
+    const payload = {
+      message: safeMessage,
+      ...(sessionKey ? { label: safeAgentId } : { label: safeAgentId }),
     }
-    console.log(`[bridge] Sent to ${safeAgentId} (session: ${safeSessionKey || 'new'}): ${safeMessage.slice(0, 50)}...`)
-    res.json({ ok: true, agentId: safeAgentId, reply })
+
+    const resp = await fetch(`${GATEWAY_URL}/api/sessions/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(GATEWAY_TOKEN ? { 'Authorization': `Bearer ${GATEWAY_TOKEN}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!resp.ok) {
+      const body = await resp.text()
+      console.error(`[bridge] Gateway send failed for ${safeAgentId}: ${resp.status} ${body.slice(0, 200)}`)
+      // Fallback to CLI
+      try {
+        execSync(
+          `openclaw agent --agent ${safeAgentId} --message ${JSON.stringify(safeMessage)} --deliver`,
+          { timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
+        )
+        console.log(`[bridge] Sent to ${safeAgentId} (CLI fallback): ${safeMessage.slice(0, 50)}...`)
+        return res.json({ ok: true, agentId: safeAgentId })
+      } catch (cliErr) {
+        return res.status(500).json({ error: 'Failed to send message', detail: body.slice(0, 200) })
+      }
+    }
+
+    const result = await resp.json()
+    console.log(`[bridge] Sent to ${safeAgentId} via gateway: ${safeMessage.slice(0, 50)}...`)
+    res.json({ ok: true, agentId: safeAgentId, reply: result.reply || result.text || null })
   } catch (err) {
-    // Fallback: try without --json and --session-id
-    try {
-      execSync(
-        `openclaw agent --agent ${safeAgentId} --message ${JSON.stringify(safeMessage)}`,
-        { timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
-      )
-      console.log(`[bridge] Sent to ${safeAgentId} (fallback): ${safeMessage.slice(0, 50)}...`)
-      res.json({ ok: true, agentId: safeAgentId })
-    } catch (err2) {
-      const detail = err2.message || 'CLI command failed'
-      console.error(`[bridge] Send failed for ${safeAgentId}:`, detail)
-      res.status(500).json({ error: 'Failed to send message', detail: detail.slice(0, 200) })
-    }
+    const detail = err.message || 'Send failed'
+    console.error(`[bridge] Send error for ${safeAgentId}:`, detail)
+    res.status(500).json({ error: 'Failed to send message', detail: detail.slice(0, 200) })
   }
 })
 
