@@ -10,6 +10,7 @@ import { setCharacterTemplates } from '../office/sprites/spriteData.js'
 import { eventBus } from '../eventBus.js'
 import { vscode } from '../vscodeApi.js'
 import { playDoneSound, setSoundEnabled } from '../notificationSound.js'
+import { getCached2dpigPayload } from '../office/sprites/load2dpigAssets.js'
 
 export interface SubagentCharacter {
   id: number
@@ -409,6 +410,12 @@ export function useExtensionMessages(
 
     // Signal that the UI is ready (mock provider or future backend will listen for this)
     eventBus.emit('webviewReady')
+
+    // Replay cached 2dPig assets if they were loaded before this effect ran (race condition fix)
+    const cached = getCached2dpigPayload()
+    if (cached) {
+      handler({ type: 'furnitureAssetsLoaded', ...cached })
+    }
 
     return () => {
       for (const unsub of unsubscribes) unsub()

@@ -16,6 +16,14 @@ import { eventBus } from '../../eventBus.js'
 import { buildDynamicCatalog } from '../layout/furnitureCatalog.js'
 import spriteJson from './2dpigSprites.json'
 
+// Cache the last emitted payload so late subscribers (React useEffect) can pick it up
+let cachedPayload: Record<string, unknown> | null = null
+
+/** Return the cached furniture assets payload (if load2dpigAssets was already called). */
+export function getCached2dpigPayload(): Record<string, unknown> | null {
+  return cachedPayload
+}
+
 // Tile size is 16px — footprint = ceil(pixelDim / 16)
 const TILE_PX = 16
 function toTiles(px: number): number {
@@ -154,6 +162,9 @@ export function load2dpigAssets(): void {
   // Build the dynamic catalog directly (synchronous, no event timing issues)
   buildDynamicCatalog({ catalog, sprites: spriteMap })
 
-  // Also emit the event for any listeners that need it (e.g., useExtensionMessages state)
+  // Cache payload so late React subscribers can pick it up
+  cachedPayload = { catalog, sprites: spriteMap }
+
+  // Also emit the event for any listeners that need it
   eventBus.emit('furnitureAssetsLoaded', { catalog, sprites: spriteMap })
 }
