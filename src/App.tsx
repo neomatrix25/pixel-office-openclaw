@@ -269,6 +269,20 @@ function App() {
     getOfficeState().selectedAgentId = null
   }, [])
 
+  // Persist layout to server when editor saves
+  useEffect(() => {
+    const unsub = eventBus.on('saveLayout', (data) => {
+      const layout = data.layout
+      if (!layout) return
+      fetch('/api/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout }),
+      }).catch(() => { /* silent — localStorage is the fallback */ })
+    })
+    return unsub
+  }, [])
+
   // Listen for OpenClaw errors to update connection status and show toasts
   useEffect(() => {
     if (isMockMode) return

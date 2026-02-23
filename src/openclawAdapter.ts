@@ -334,13 +334,29 @@ export class OpenClawAdapter {
   }
 
   private async loadDefaultLayout(): Promise<void> {
+    // Try loading saved layout from server first
+    try {
+      const resp = await fetch('/api/layout')
+      if (resp.ok) {
+        const data = await resp.json() as { layout: OfficeLayout }
+        if (data.layout) {
+          eventBus.emit('layoutLoaded', { layout: data.layout })
+          console.log('[OpenClaw] Layout loaded from server')
+          return
+        }
+      }
+    } catch {
+      // Server layout not available, fall through to default
+    }
+
+    // Fall back to default layout asset
     try {
       const resp = await fetch('./assets/default-layout.json')
       const layout = await resp.json() as OfficeLayout
       eventBus.emit('layoutLoaded', { layout })
-      console.log('[OpenClaw] Layout loaded')
+      console.log('[OpenClaw] Default layout loaded')
     } catch (err) {
-      console.warn('[OpenClaw] Could not load default-layout.json:', err)
+      console.warn('[OpenClaw] Could not load layout:', err)
       eventBus.emit('layoutLoaded', { layout: null })
     }
   }

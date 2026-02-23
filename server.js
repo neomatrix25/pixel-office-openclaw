@@ -15,7 +15,7 @@
  */
 
 import express from 'express'
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync } from 'fs'
 import { execFileSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -283,6 +283,44 @@ app.post('/api/send', async (req, res) => {
     const detail = err.message || 'Send failed'
     console.error(`[bridge] Send error for ${safeAgentId}:`, detail)
     res.status(500).json({ error: 'Failed to send message', detail: detail.slice(0, 200) })
+  }
+})
+
+// ── Layout Persistence (Save/Load to Disk) ──────────────────────
+
+const LAYOUT_DIR = join(OPENCLAW_HOME, 'pixel-office')
+const LAYOUT_FILE = join(LAYOUT_DIR, 'layout.json')
+
+app.get('/api/layout', (_req, res) => {
+  try {
+    if (!existsSync(LAYOUT_FILE)) {
+      return res.status(404).json({ error: 'No saved layout' })
+    }
+    const raw = readFileSync(LAYOUT_FILE, 'utf-8')
+    const layout = JSON.parse(raw)
+    res.json({ layout })
+  } catch (err) {
+    console.error('[bridge] Error reading layout:', err.message)
+    res.status(500).json({ error: 'Failed to read layout' })
+  }
+})
+
+app.post('/api/layout', (req, res) => {
+  const { layout } = req.body || {}
+  if (!layout || !layout.version || !Array.isArray(layout.tiles)) {
+    return res.status(400).json({ error: 'Invalid layout' })
+  }
+
+  try {
+    if (!existsSync(LAYOUT_DIR)) {
+      mkdirSync(LAYOUT_DIR, { recursive: true })
+    }
+    writeFileSync(LAYOUT_FILE, JSON.stringify(layout, null, 2), 'utf-8')
+    console.log(`[bridge] Layout saved (${layout.cols}x${layout.rows}, ${layout.furniture?.length || 0} items)`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[bridge] Error saving layout:', err.message)
+    res.status(500).json({ error: 'Failed to save layout' })
   }
 })
 
