@@ -217,7 +217,11 @@ export class OfficeState {
     const currentSeats = this.seats.size
     if (currentSeats >= needed) return
 
-    const seatsToAdd = needed - currentSeats
+    // Guard: cap auto-expansion to 32 seats max to prevent runaway layout corruption
+    const MAX_AUTO_SEATS = 32
+    if (currentSeats >= MAX_AUTO_SEATS) return
+
+    const seatsToAdd = Math.min(needed - currentSeats, MAX_AUTO_SEATS - currentSeats)
     const deskGroupsToAdd = Math.ceil(seatsToAdd / 4)
     // 2 desk groups per row (left room + right room)
     const deskGroupRowCount = Math.ceil(deskGroupsToAdd / 2)
