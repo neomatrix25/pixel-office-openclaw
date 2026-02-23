@@ -123,47 +123,75 @@ function EditActionBar({ editor, editorState: es }: { editor: ReturnType<typeof 
   )
 }
 
-// ── Disconnect Button ───────────────────────────────────────────
+// ── Status Bar ──────────────────────────────────────────────────
 
-function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
-  const [hovered, setHovered] = useState(false)
+function StatusBar({
+  gatewayHost,
+  agentCount,
+  onDisconnect,
+  isMock,
+}: {
+  gatewayHost: string
+  agentCount: number
+  onDisconnect: () => void
+  isMock: boolean
+}) {
+  const [disconnectHovered, setDisconnectHovered] = useState(false)
 
   return (
-    <button
-      onClick={onDisconnect}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title="Disconnect from OpenClaw"
-      style={{
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        zIndex: 'var(--pixel-controls-z)' as unknown as number,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        fontSize: '20px',
-        color: hovered ? '#e55' : 'rgba(255, 255, 255, 0.5)',
-        background: hovered ? 'rgba(200, 50, 50, 0.15)' : 'var(--pixel-btn-bg)',
-        border: hovered ? '2px solid rgba(200, 50, 50, 0.4)' : '2px solid transparent',
-        borderRadius: 0,
-        cursor: 'pointer',
-        boxShadow: 'var(--pixel-shadow)',
-        transition: 'none',
-      }}
-    >
-      <span
+    <div className="pixel-status-bar">
+      <div className="pixel-status-bar-left">
+        <span className="pixel-status-dot" />
+        <span className="pixel-status-text">
+          {isMock ? 'Mock mode' : `Connected to ${gatewayHost}`}
+        </span>
+        <span className="pixel-status-separator" />
+        <span className="pixel-status-text">
+          {agentCount} {agentCount === 1 ? 'agent' : 'agents'} online
+        </span>
+      </div>
+      <button
+        className="pixel-status-disconnect"
+        onClick={onDisconnect}
+        onMouseEnter={() => setDisconnectHovered(true)}
+        onMouseLeave={() => setDisconnectHovered(false)}
+        title={isMock ? 'Exit mock mode' : 'Disconnect from OpenClaw'}
         style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: 'var(--pixel-green)',
-          flexShrink: 0,
+          color: disconnectHovered ? '#e55' : 'rgba(255, 255, 255, 0.5)',
+          background: disconnectHovered ? 'rgba(200, 50, 50, 0.15)' : 'transparent',
         }}
-      />
-      Disconnect
-    </button>
+      >
+        Disconnect
+      </button>
+    </div>
+  )
+}
+
+// ── Error Toasts ────────────────────────────────────────────────
+
+function ErrorToasts({
+  toasts,
+  onDismiss,
+}: {
+  toasts: Array<{ id: number; message: string }>
+  onDismiss: (id: number) => void
+}) {
+  if (toasts.length === 0) return null
+
+  return (
+    <div className="pixel-toast-container">
+      {toasts.map((toast) => (
+        <div key={toast.id} className="pixel-toast pixel-toast-error">
+          <span className="pixel-toast-message">{toast.message}</span>
+          <button
+            className="pixel-toast-close"
+            onClick={() => onDismiss(toast.id)}
+          >
+            x
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -173,6 +201,9 @@ function App() {
   // Connection state (not used in mock mode)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(isMockMode ? 'connected' : 'idle')
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [gatewayHost, setGatewayHost] = useState<string>(isMockMode ? 'mock' : '')
+  const [errorToasts, setErrorToasts] = useState<Array<{ id: number; message: string }>>([])
+  const toastIdRef = useRef(0)
   const adapterRef = useRef<OpenClawAdapter | null>(null)
 
   const editor = useEditorActions(getOfficeState, editorState)
@@ -212,15 +243,25 @@ function App() {
     // In standalone mode, clicking an agent is a no-op (no terminal to focus)
   }, [])
 
-  // Listen for OpenClaw errors to update connection status
+  // Listen for OpenClaw errors to update connection status and show toasts
   useEffect(() => {
     if (isMockMode) return
     const unsub = eventBus.on('openclawError', (data) => {
-      setConnectionError(data.message as string)
+      const message = data.message as string
+      setConnectionError(message)
       // Don't set status to 'error' for transient polling errors once connected;
       // only show error if we never successfully connected
       if (connectionStatus === 'connecting') {
         setConnectionStatus('error')
+      }
+      // Show error toast when connected (transient errors)
+      if (connectionStatus === 'connected') {
+        const id = ++toastIdRef.current
+        setErrorToasts((prev) => [...prev, { id, message }])
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+          setErrorToasts((prev) => prev.filter((t) => t.id !== id))
+        }, 5000)
       }
     })
     return unsub
@@ -237,6 +278,12 @@ function App() {
 
     setConnectionStatus('connecting')
     setConnectionError(null)
+    // Extract hostname for display in status bar
+    try {
+      setGatewayHost(new URL(gatewayUrl).host)
+    } catch {
+      setGatewayHost(gatewayUrl)
+    }
 
     const adapter = new OpenClawAdapter(gatewayUrl, apiToken)
     adapterRef.current = adapter
@@ -381,8 +428,19 @@ function App() {
         }}
       />
 
-      {/* Disconnect button (only when connected to OpenClaw, not in mock mode) */}
-      {!isMockMode && <DisconnectButton onDisconnect={handleDisconnect} />}
+      {/* Status bar */}
+      <StatusBar
+        gatewayHost={gatewayHost}
+        agentCount={agents.length}
+        onDisconnect={handleDisconnect}
+        isMock={isMockMode}
+      />
+
+      {/* Error toasts */}
+      <ErrorToasts
+        toasts={errorToasts}
+        onDismiss={(id) => setErrorToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
 
       <BottomToolbar
         isEditMode={editor.isEditMode}

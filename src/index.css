@@ -73,3 +73,116 @@ html, body, #root {
 * {
   font-family: 'FS Pixel Sans', sans-serif;
 }
+
+/* ── Status Bar ─────────────────────────────────────────── */
+
+.pixel-status-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: rgba(10, 10, 20, 0.75);
+  border-bottom: 1px solid var(--pixel-border);
+  font-size: 18px;
+  pointer-events: auto;
+}
+
+.pixel-status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pixel-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pixel-green);
+  flex-shrink: 0;
+}
+
+.pixel-status-text {
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.pixel-status-separator {
+  width: 1px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.pixel-status-disconnect {
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 8px;
+  font-family: 'FS Pixel Sans', sans-serif;
+}
+
+/* ── Error Toasts ───────────────────────────────────────── */
+
+.pixel-toast-container {
+  position: absolute;
+  top: 36px;
+  right: 10px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 340px;
+}
+
+.pixel-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--pixel-bg);
+  border: 2px solid var(--pixel-border);
+  box-shadow: var(--pixel-shadow);
+  font-size: 16px;
+  animation: pixel-toast-slide 0.2s ease-out;
+}
+
+.pixel-toast-error {
+  border-color: rgba(200, 50, 50, 0.5);
+  background: rgba(40, 15, 15, 0.9);
+}
+
+.pixel-toast-message {
+  color: rgba(255, 255, 255, 0.8);
+  word-break: break-word;
+  flex: 1;
+}
+
+.pixel-toast-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 18px;
+  font-family: 'FS Pixel Sans', sans-serif;
+  flex-shrink: 0;
+}
+
+.pixel-toast-close:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+@keyframes pixel-toast-slide {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
