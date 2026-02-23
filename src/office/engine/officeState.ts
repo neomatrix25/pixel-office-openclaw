@@ -1,4 +1,4 @@
-import { TILE_SIZE, MATRIX_EFFECT_DURATION, CharacterState, Direction } from '../types.js'
+import { TILE_SIZE, MATRIX_EFFECT_DURATION, CharacterState, Direction, TileType, FurnitureType, MAX_ROWS } from '../types.js'
 import {
   PALETTE_COUNT,
   HUE_SHIFT_MIN_DEG,
@@ -13,7 +13,7 @@ import {
   CHARACTER_HIT_HALF_WIDTH,
   CHARACTER_HIT_HEIGHT,
 } from '../../constants.js'
-import type { Character, Seat, FurnitureInstance, TileType as TileTypeVal, OfficeLayout, PlacedFurniture } from '../types.js'
+import type { Character, Seat, FurnitureInstance, TileType as TileTypeVal, OfficeLayout, PlacedFurniture, FloorColor } from '../types.js'
 import { createCharacter, updateCharacter } from './characters.js'
 import { matrixEffectSeeds } from './matrixEffect.js'
 import { isWalkable, getWalkableTiles, findPath } from '../layout/tileMap.js'
@@ -209,6 +209,118 @@ export class OfficeState {
   }
 
   /**
+   * Auto-expand the office when there aren't enough seats.
+   * Adds desk groups (desk + 4 chairs) below existing furniture,
+   * expanding the grid downward as needed.
+   */
+  ensureCapacity(needed: number): void {
+    const currentSeats = this.seats.size
+    if (currentSeats >= needed) return
+
+    const seatsToAdd = needed - currentSeats
+    const deskGroupsToAdd = Math.ceil(seatsToAdd / 4)
+    // 2 desk groups per row (left room + right room)
+    const deskGroupRowCount = Math.ceil(deskGroupsToAdd / 2)
+    // Each desk group row needs 5 tile rows (chair-top + desk 2×2 + chair-bottom + gap)
+    const rowsToAdd = deskGroupRowCount * 5
+
+    const cols = this.layout.cols
+    const oldRows = this.layout.rows
+    const newRows = Math.min(oldRows + rowsToAdd, MAX_ROWS)
+    if (newRows <= oldRows) return
+
+    // Floor color constants (matching default layout)
+    const LEFT_COLOR: FloorColor = { h: 35, s: 30, b: 15, c: 0 }
+    const RIGHT_COLOR: FloorColor = { h: 25, s: 45, b: 5, c: 10 }
+    const DOOR_COLOR: FloorColor = { h: 35, s: 25, b: 10, c: 0 }
+
+    // Clone tiles + colors
+    const newTiles = [...this.layout.tiles] as TileTypeVal[]
+    const newColors = [...(this.layout.tileColors || [])] as (FloorColor | null)[]
+
+    // Convert old bottom wall (row oldRows-1) to floor
+    for (let c = 0; c < cols; c++) {
+      const idx = (oldRows - 1) * cols + c
+      if (c === 0 || c === cols - 1) continue
+      if (c === 10) {
+        newTiles[idx] = TileType.FLOOR_4 as TileTypeVal
+        newColors[idx] = DOOR_COLOR
+      } else if (c < 10) {
+        newTiles[idx] = TileType.FLOOR_1 as TileTypeVal
+        newColors[idx] = LEFT_COLOR
+      } else {
+        newTiles[idx] = TileType.FLOOR_2 as TileTypeVal
+        newColors[idx] = RIGHT_COLOR
+      }
+    }
+
+    // Add new rows
+    for (let r = oldRows; r < newRows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (r === newRows - 1) {
+          newTiles.push(TileType.WALL as TileTypeVal)
+          newColors.push(null)
+        } else if (c === 0 || c === cols - 1) {
+          newTiles.push(TileType.WALL as TileTypeVal)
+          newColors.push(null)
+        } else if (c === 10) {
+          newTiles.push(TileType.FLOOR_4 as TileTypeVal)
+          newColors.push(DOOR_COLOR)
+        } else if (c < 10) {
+          newTiles.push(TileType.FLOOR_1 as TileTypeVal)
+          newColors.push(LEFT_COLOR)
+        } else {
+          newTiles.push(TileType.FLOOR_2 as TileTypeVal)
+          newColors.push(RIGHT_COLOR)
+        }
+      }
+    }
+
+    // Place new desk groups
+    const newFurniture = [...this.layout.furniture]
+    let deskCount = 0
+    let uid = Date.now() // unique prefix for auto-generated furniture
+
+    for (let gr = 0; gr < deskGroupRowCount && deskCount < deskGroupsToAdd; gr++) {
+      // First desk row: chair-top at row (oldRows-1), desk at oldRows, etc.
+      const deskRow = oldRows + gr * 5
+
+      // Left room desk group at col 4
+      if (deskCount < deskGroupsToAdd) {
+        const dc = 4
+        newFurniture.push({ uid: `desk-a${uid++}`, type: FurnitureType.DESK, col: dc, row: deskRow })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc, row: deskRow - 1 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc + 1, row: deskRow + 2 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc - 1, row: deskRow + 1 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc + 2, row: deskRow })
+        deskCount++
+      }
+
+      // Right room desk group at col 13
+      if (deskCount < deskGroupsToAdd) {
+        const dc = 13
+        newFurniture.push({ uid: `desk-a${uid++}`, type: FurnitureType.DESK, col: dc, row: deskRow })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc, row: deskRow - 1 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc + 1, row: deskRow + 2 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc - 1, row: deskRow + 1 })
+        newFurniture.push({ uid: `ch-a${uid++}`, type: FurnitureType.CHAIR, col: dc + 2, row: deskRow })
+        deskCount++
+      }
+    }
+
+    const newLayout: OfficeLayout = {
+      version: 1,
+      cols,
+      rows: newRows,
+      tiles: newTiles,
+      tileColors: newColors,
+      furniture: newFurniture,
+    }
+
+    this.rebuildFromLayout(newLayout)
+  }
+
+  /**
    * Pick a diverse palette for a new agent based on currently active agents.
    * First 6 agents each get a unique skin (random order). Beyond 6, skins
    * repeat in balanced rounds with a random hue shift (≥45°).
@@ -299,6 +411,10 @@ export class OfficeState {
       }
     }
     if (!seatId) {
+      seatId = this.findFreeSeat()
+    }
+    if (!seatId) {
+      this.ensureCapacity(this.characters.size + 1)
       seatId = this.findFreeSeat()
     }
 

@@ -6,6 +6,8 @@ interface BottomToolbarProps {
   onToggleEditMode: () => void
   isDebugMode: boolean
   onToggleDebugMode: () => void
+  isLogOpen: boolean
+  onToggleLog: () => void
 }
 
 const panelStyle: React.CSSProperties = {
@@ -45,6 +47,8 @@ export function BottomToolbar({
   onToggleEditMode,
   isDebugMode,
   onToggleDebugMode,
+  isLogOpen,
+  onToggleLog,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -66,6 +70,22 @@ export function BottomToolbar({
         title="Edit office layout"
       >
         Layout
+      </button>
+      <button
+        onClick={onToggleLog}
+        onMouseEnter={() => setHovered('log')}
+        onMouseLeave={() => setHovered(null)}
+        style={
+          isLogOpen
+            ? { ...btnActive }
+            : {
+                ...btnBase,
+                background: hovered === 'log' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+              }
+        }
+        title="Activity log"
+      >
+        Log
       </button>
       <div style={{ position: 'relative' }}>
         <button

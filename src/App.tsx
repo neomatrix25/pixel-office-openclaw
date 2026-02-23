@@ -14,6 +14,7 @@ import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
 import { ChatSidebar } from './components/ChatSidebar.js'
+import { ActivityLog } from './components/ActivityLog.js'
 import { ConnectionScreen } from './ConnectionScreen.js'
 import type { ConnectionStatus } from './ConnectionScreen.js'
 import { OpenClawAdapter } from './openclawAdapter.js'
@@ -219,6 +220,7 @@ function App() {
   const { agents, selectedAgent, agentTools, agentStatuses, agentMeta, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [isLogOpen, setIsLogOpen] = useState(false)
   const [sidebarAgentId, setSidebarAgentId] = useState<number | null>(null)
 
   // Sync sidebar with officeState.selectedAgentId (set by canvas click)
@@ -234,6 +236,7 @@ function App() {
   }, [])
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
+  const handleToggleLog = useCallback(() => setIsLogOpen((prev) => !prev), [])
 
   const handleSelectAgent = useCallback((_id: number) => {
     // In standalone mode, agent selection is a no-op (no terminal to focus)
@@ -431,7 +434,8 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex' }}>
       {/* Office panel */}
-      <div ref={containerRef} style={{ flex: sidebarAgentId != null ? '0 0 70%' : '1 1 100%', height: '100%', position: 'relative', overflow: 'hidden', transition: 'flex 0.2s ease' }}>
+      <div style={{ flex: sidebarAgentId != null ? '0 0 70%' : '1 1 100%', height: '100%', display: 'flex', flexDirection: 'column', transition: 'flex 0.2s ease' }}>
+      <div ref={containerRef} style={{ flex: isLogOpen ? '1 1 70%' : '1 1 100%', position: 'relative', overflow: 'hidden', transition: 'flex 0.2s ease' }}>
         <style>{`
           @keyframes pixel-agents-pulse {
             0%, 100% { opacity: 1; }
@@ -489,6 +493,8 @@ function App() {
           onToggleEditMode={editor.handleToggleEditMode}
           isDebugMode={isDebugMode}
           onToggleDebugMode={handleToggleDebugMode}
+          isLogOpen={isLogOpen}
+          onToggleLog={handleToggleLog}
         />
 
         {editor.isEditMode && editor.isDirty && (
@@ -566,6 +572,14 @@ function App() {
             onSelectAgent={handleSelectAgent}
           />
         )}
+      </div>
+
+      {/* Activity log panel */}
+      {isLogOpen && (
+        <div style={{ flex: '0 0 30%', maxHeight: '30%', overflow: 'hidden' }}>
+          <ActivityLog agentMeta={agentMeta} />
+        </div>
+      )}
       </div>
 
       {/* Chat sidebar — 30% width when an agent is selected */}

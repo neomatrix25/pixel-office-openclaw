@@ -181,33 +181,71 @@ app.get('/api/sessions', (req, res) => {
 
 // ── Chat Bridge (Send Message → Agent) ───────────────────────────
 
+/**
+ * Get the most recent active session key for an agent.
+ * Routes pixel office chat into the same session as Slack.
+ */
+function getActiveSessionKey(agentId) {
+  const sessionsFile = join(OPENCLAW_HOME, 'agents', agentId, 'sessions', 'sessions.json')
+  if (!existsSync(sessionsFile)) return null
+
+  try {
+    const raw = readFileSync(sessionsFile, 'utf-8')
+    const data = JSON.parse(raw)
+
+    let bestKey = null
+    let bestTime = 0
+
+    for (const [key, session] of Object.entries(data)) {
+      const updatedAt = session.updatedAt || 0
+      if (updatedAt > bestTime) {
+        bestTime = updatedAt
+        bestKey = key
+      }
+    }
+
+    return bestKey
+  } catch {
+    return null
+  }
+}
+
 app.post('/api/send', (req, res) => {
   const { agentId, message } = req.body || {}
   if (!agentId || !message) {
     return res.status(400).json({ error: 'Missing agentId or message' })
   }
 
-  // Sanitize inputs to prevent command injection
   const safeAgentId = String(agentId).replace(/[^a-zA-Z0-9_-]/g, '')
   const safeMessage = String(message).slice(0, 2000)
 
+  // Route to agent's existing session (same conversation as Slack)
+  const sessionKey = getActiveSessionKey(safeAgentId)
+  const safeSessionKey = sessionKey ? String(sessionKey).replace(/[^a-zA-Z0-9_.:/-]/g, '') : null
+  const sessionFlag = safeSessionKey ? ` --session-id ${JSON.stringify(safeSessionKey)}` : ''
+
   try {
-    // Fire-and-forget: send message to agent via CLI
-    // Use stdin to avoid shell injection via message content
-    execSync(
-      `echo ${JSON.stringify(safeMessage)} | openclaw agent --agent ${safeAgentId} --stdin`,
-      { timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    const result = execSync(
+      `openclaw agent --agent ${safeAgentId}${sessionFlag} --message ${JSON.stringify(safeMessage)} --json`,
+      { timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
     )
-    console.log(`[bridge] Sent message to agent ${safeAgentId}: ${safeMessage.slice(0, 50)}...`)
-    res.json({ ok: true, agentId: safeAgentId })
+    let reply = null
+    try {
+      const parsed = JSON.parse(result)
+      reply = parsed.reply || parsed.response || parsed.text || null
+    } catch {
+      reply = result.trim() || null
+    }
+    console.log(`[bridge] Sent to ${safeAgentId} (session: ${safeSessionKey || 'new'}): ${safeMessage.slice(0, 50)}...`)
+    res.json({ ok: true, agentId: safeAgentId, reply })
   } catch (err) {
-    // If the CLI doesn't support --stdin, try --message flag
+    // Fallback: try without --json and --session-id
     try {
       execSync(
         `openclaw agent --agent ${safeAgentId} --message ${JSON.stringify(safeMessage)}`,
-        { timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+        { timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
       )
-      console.log(`[bridge] Sent message to agent ${safeAgentId}: ${safeMessage.slice(0, 50)}...`)
+      console.log(`[bridge] Sent to ${safeAgentId} (fallback): ${safeMessage.slice(0, 50)}...`)
       res.json({ ok: true, agentId: safeAgentId })
     } catch (err2) {
       const detail = err2.message || 'CLI command failed'
