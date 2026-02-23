@@ -119,9 +119,6 @@ export class OpenClawAdapter {
   /** Whether the first successful poll has completed. */
   private initialized = false
 
-  /** Event bus unsubscribe function for 'webviewReady'. */
-  private unsubWebviewReady: (() => void) | null = null
-
   /** Whether stop() has been called (prevents races). */
   private stopped = false
 
@@ -136,20 +133,13 @@ export class OpenClawAdapter {
   }
 
   /**
-   * Start the adapter. Listens for 'webviewReady' then begins polling.
-   * If the game UI is already ready (event already fired), you can call
-   * start() and it will wait for the next 'webviewReady' emission.
+   * Start the adapter. Begins polling immediately — the React event
+   * subscribers are already mounted by the time this is called.
    */
   start(): void {
     this.stopped = false
-    console.log('[OpenClaw] Adapter starting — waiting for webviewReady')
-
-    this.unsubWebviewReady = eventBus.on('webviewReady', () => {
-      console.log('[OpenClaw] webviewReady received — beginning poll loop')
-      this.unsubWebviewReady?.()
-      this.unsubWebviewReady = null
-      this.beginPolling()
-    })
+    console.log('[OpenClaw] Adapter starting — beginning poll loop')
+    this.beginPolling()
   }
 
   /** Stop polling and clean up all listeners. */
@@ -158,10 +148,6 @@ export class OpenClawAdapter {
     if (this.pollTimer !== null) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
-    }
-    if (this.unsubWebviewReady) {
-      this.unsubWebviewReady()
-      this.unsubWebviewReady = null
     }
     this.sessions.clear()
     this.sessionData.clear()
@@ -307,44 +293,39 @@ export class OpenClawAdapter {
   }
 
   private emitInitialState(): void {
-    // Load the default layout (same as mockProvider)
-    this.loadDefaultLayout().then(() => {
-      // Emit existingAgents with all currently tracked sessions
-      const agents: number[] = []
-      const agentMeta: Record<number, { palette: number; hueShift: number; seatId: string | null; name?: string; model?: string; kind?: string }> = {}
+    // Emit existingAgents FIRST — useExtensionMessages buffers these in
+    // pendingAgents, which get processed when layoutLoaded fires next.
+    const agents: number[] = []
+    const agentMeta: Record<number, { palette: number; hueShift: number; seatId: string | null; name?: string; model?: string; kind?: string }> = {}
 
-      for (const tracked of this.sessions.values()) {
-        agents.push(tracked.numericId)
-        // No persisted palette/seat info from the API, so leave defaults
-        // Include name/model/kind from the session data
-        const sessionData = this.getSessionData(tracked.sessionKey)
-        agentMeta[tracked.numericId] = {
-          palette: 0,
-          hueShift: 0,
-          seatId: null,
-          name: sessionData?.name || undefined,
-          model: sessionData?.model || undefined,
-          kind: sessionData?.kind || undefined,
-        }
+    for (const tracked of this.sessions.values()) {
+      agents.push(tracked.numericId)
+      const sessionData = this.getSessionData(tracked.sessionKey)
+      agentMeta[tracked.numericId] = {
+        palette: 0,
+        hueShift: 0,
+        seatId: null,
+        name: sessionData?.name || undefined,
+        model: sessionData?.model || undefined,
+        kind: sessionData?.kind || undefined,
       }
+    }
 
-      eventBus.emit('existingAgents', {
-        agents,
-        agentMeta,
-      })
+    eventBus.emit('existingAgents', { agents, agentMeta })
 
-      // Also emit initial statuses
+    // THEN load layout — when layoutLoaded fires, the buffered agents
+    // get added to the office state via os.addAgent().
+    this.loadDefaultLayout().then(() => {
+      // Emit initial statuses after layout is ready
       for (const tracked of this.sessions.values()) {
         eventBus.emit('agentStatus', {
           id: tracked.numericId,
           status: tracked.lastStatus,
         })
       }
-
       console.log(`[OpenClaw] Initialized with ${agents.length} agent(s)`)
     }).catch((err) => {
       console.error('[OpenClaw] Failed to load default layout:', err)
-      // Still emit layout with null so the game doesn't hang on "Loading..."
       eventBus.emit('layoutLoaded', { layout: null })
     })
   }

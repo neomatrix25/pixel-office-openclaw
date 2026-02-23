@@ -215,7 +215,7 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, agentMeta, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, agentMeta: _agentMeta, subagentTools, subagentCharacters, layoutReady, loadedAssets } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
 
@@ -341,10 +341,6 @@ function App() {
   useEffect(() => {
     if (isEnvConnect && !isMockMode && connectionStatus === 'idle') {
       handleConnect(envGatewayUrl!, envGatewayToken!)
-      // Re-emit webviewReady on next tick — the adapter subscribes to it
-      // in start(), but useExtensionMessages may have already fired it
-      // before the adapter was created (race condition).
-      setTimeout(() => eventBus.emit('webviewReady', {}), 0)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -45,11 +45,9 @@ export function startMockProvider(): () => void {
   const timers: ReturnType<typeof setTimeout>[] = []
   const intervals: ReturnType<typeof setInterval>[] = []
 
-  // Wait for webviewReady from useExtensionMessages, then begin simulation
-  const unsub = eventBus.on('webviewReady', () => {
-    unsub()
-    boot()
-  })
+  // Start immediately — React event subscribers are already mounted
+  // by the time the dynamic import resolves in main.tsx.
+  boot()
 
   function boot(): void {
     // Step 1: Load the default layout
@@ -143,6 +141,5 @@ export function startMockProvider(): () => void {
   return () => {
     for (const t of timers) clearTimeout(t)
     for (const i of intervals) clearInterval(i)
-    unsub()
   }
 }
