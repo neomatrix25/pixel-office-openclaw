@@ -341,6 +341,10 @@ function App() {
   useEffect(() => {
     if (isEnvConnect && !isMockMode && connectionStatus === 'idle') {
       handleConnect(envGatewayUrl!, envGatewayToken!)
+      // Re-emit webviewReady on next tick — the adapter subscribes to it
+      // in start(), but useExtensionMessages may have already fired it
+      // before the adapter was created (race condition).
+      setTimeout(() => eventBus.emit('webviewReady', {}), 0)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
