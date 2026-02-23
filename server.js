@@ -238,59 +238,24 @@ app.post('/api/send', async (req, res) => {
   const safeAgentId = String(agentId).replace(/[^a-zA-Z0-9_-]/g, '')
   const safeMessage = String(message).slice(0, 2000)
 
-  // Use OpenClaw gateway API to send message to the agent's session
-  const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789'
-  const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || ''
-
-  // Find the agent's most recent session key
-  const sessionKey = getActiveSessionKey(safeAgentId)
-
+  // Send via OpenClaw CLI (gateway is WebSocket-only, no REST endpoint)
   try {
-    // Use sessions_send via the gateway API
-    const payload = {
-      message: safeMessage,
-      ...(sessionKey ? { label: safeAgentId } : { label: safeAgentId }),
+    console.log(`[bridge] Sending to ${safeAgentId} via CLI: ${safeMessage.slice(0, 50)}...`)
+    const cliResult = execFileSync('openclaw', ['agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
+      { timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+    )
+    console.log(`[bridge] Sent to ${safeAgentId} (CLI OK)`)
+    try {
+      const parsed = JSON.parse(cliResult)
+      const reply = parsed.result?.payloads?.[0]?.text
+        || parsed.reply || parsed.text || parsed.result || cliResult.trim()
+      return res.json({ ok: true, agentId: safeAgentId, reply })
+    } catch {
+      return res.json({ ok: true, agentId: safeAgentId, reply: cliResult.trim() })
     }
-
-    const resp = await fetch(`${GATEWAY_URL}/api/sessions/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(GATEWAY_TOKEN ? { 'Authorization': `Bearer ${GATEWAY_TOKEN}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    })
-
-    if (!resp.ok) {
-      const body = await resp.text()
-      console.error(`[bridge] Gateway send failed for ${safeAgentId}: ${resp.status} ${body.slice(0, 200)}`)
-      // Fallback to CLI — use --json to capture the agent's reply
-      try {
-        const cliResult = execFileSync('openclaw', ['agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
-          { timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
-        )
-        console.log(`[bridge] Sent to ${safeAgentId} (CLI): ${safeMessage.slice(0, 50)}...`)
-        try {
-          const parsed = JSON.parse(cliResult)
-          // OpenClaw CLI returns { result: { payloads: [{ text: "..." }] } }
-          const reply = parsed.result?.payloads?.[0]?.text
-            || parsed.reply || parsed.text || parsed.result || cliResult.trim()
-          return res.json({ ok: true, agentId: safeAgentId, reply })
-        } catch {
-          return res.json({ ok: true, agentId: safeAgentId, reply: cliResult.trim() })
-        }
-      } catch (cliErr) {
-        return res.status(500).json({ error: 'Failed to send message', detail: cliErr.message?.slice(0, 200) || body.slice(0, 200) })
-      }
-    }
-
-    const result = await resp.json()
-    console.log(`[bridge] Sent to ${safeAgentId} via gateway: ${safeMessage.slice(0, 50)}...`)
-    res.json({ ok: true, agentId: safeAgentId, reply: result.reply || result.text || null })
-  } catch (err) {
-    const detail = err.message || 'Send failed'
-    console.error(`[bridge] Send error for ${safeAgentId}:`, detail)
-    res.status(500).json({ error: 'Failed to send message', detail: detail.slice(0, 200) })
+  } catch (cliErr) {
+    console.error(`[bridge] CLI send failed for ${safeAgentId}:`, cliErr.message?.slice(0, 200))
+    return res.status(500).json({ error: 'Failed to send message', detail: cliErr.message?.slice(0, 200) || 'CLI error' })
   }
 })
 
