@@ -1,6 +1,6 @@
 {
   "name": "pixel-office-openclaw",
-  "version": "0.1.2",
+  "version": "0.1.7",
   "description": "Watch your OpenClaw AI agents work in a pixel-art virtual office",
   "type": "module",
   "bin": {

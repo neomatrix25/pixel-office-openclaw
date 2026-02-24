@@ -16,7 +16,7 @@
 
 import express from 'express'
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs'
-import { execFileSync } from 'child_process'
+import { execFileSync, execSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { homedir } from 'os'
@@ -241,8 +241,11 @@ app.post('/api/send', async (req, res) => {
   // Send via OpenClaw CLI (gateway is WebSocket-only, no REST endpoint)
   try {
     console.log(`[bridge] Sending to ${safeAgentId} via CLI: ${safeMessage.slice(0, 50)}...`)
-    const cliResult = execFileSync('openclaw', ['agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
-      { timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+    // Use env -i with essential vars to get a clean process, avoiding npx inheritance
+    const essential = ['HOME', 'PATH', 'USER', 'SHELL', 'LANG', 'TERM', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']
+    const envArgs = essential.filter(k => process.env[k]).map(k => `${k}=${process.env[k]}`)
+    const cliResult = execFileSync('/usr/bin/env', ['-i', ...envArgs, '/usr/bin/openclaw', 'agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
+      { timeout: 120000, encoding: 'utf-8', cwd: homedir(), stdio: ['pipe', 'pipe', 'pipe'] }
     )
     console.log(`[bridge] Sent to ${safeAgentId} (CLI OK)`)
     try {
