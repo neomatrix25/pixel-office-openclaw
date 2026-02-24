@@ -89,7 +89,7 @@ const HOST = getArg(['--host'], '127.0.0.1')
 const OPENCLAW_HOME = getArg(['--openclaw-home'], join(homedir(), '.openclaw'))
 const CHAT_DISABLED = hasFlag(['--no-chat'])
 const MOCK_MODE = hasFlag(['--mock'])
-const OPEN_BROWSER = !hasFlag(['--no-open'])
+const OPEN_BROWSER = !hasFlag(['--no-open']) && !process.env.pm_id && !process.env.PM2_HOME
 
 // ── Auto-detect Gateway ─────────────────────────────────────────
 
