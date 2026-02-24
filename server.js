@@ -244,7 +244,10 @@ app.post('/api/send', async (req, res) => {
     // Use env -i with essential vars to get a clean process, avoiding npx inheritance
     const essential = ['HOME', 'PATH', 'USER', 'SHELL', 'LANG', 'TERM', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']
     const envArgs = essential.filter(k => process.env[k]).map(k => `${k}=${process.env[k]}`)
-    const cliResult = execFileSync('/usr/bin/env', ['-i', ...envArgs, '/usr/bin/openclaw', 'agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
+    // Find openclaw binary dynamically (works on Linux, Mac, any install location)
+    let openclawBin
+    try { openclawBin = execFileSync('which', ['openclaw'], { encoding: 'utf-8' }).trim() } catch { openclawBin = 'openclaw' }
+    const cliResult = execFileSync('/usr/bin/env', ['-i', ...envArgs, openclawBin, 'agent', '--agent', safeAgentId, '--message', safeMessage, '--json'],
       { timeout: 120000, encoding: 'utf-8', cwd: homedir(), stdio: ['pipe', 'pipe', 'pipe'] }
     )
     console.log(`[bridge] Sent to ${safeAgentId} (CLI OK)`)
